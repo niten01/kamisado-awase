@@ -69,9 +69,6 @@ void Board::resetToInitial() {
   }
 }
 
-auto Board::size() const -> size_t {
-  return board_.size();
-}
 auto Board::inBounds(Coord p) const -> bool {
   return p.row < size() && p.col < size();
 }

@@ -30,11 +30,10 @@ auto Evaluator::scoreSide(const GameState& s, Player perspective) -> int {
 
   int score{ 0 };
 
-  constexpr int W_forward  = 30;  // reward being closer to goal row
-  constexpr int W_align    = 12;  // reward being aligned with goal column
-  constexpr int W_unreach  = 100; // heavy penalty per unreachable "step"
-  constexpr int W_block    = 200; // heavy penalty per blocked goal row
-  constexpr int W_mobility = 1;   // small mobility bonus
+  constexpr int W_forward = 30;  // reward being closer to goal row
+  constexpr int W_align   = 12;  // reward being aligned with goal column
+  constexpr int W_unreach = 100; // heavy penalty per unreachable "step"
+  constexpr int W_block   = 200; // heavy penalty per blocked goal row
   constexpr int W_immobility  = 50; // immobility penalty
   constexpr int W_lowMobility = 25; // low mobility penalty
   constexpr int N_lowMobility = 5;  // low mobility threshold
@@ -59,9 +58,6 @@ auto Evaluator::scoreSide(const GameState& s, Player perspective) -> int {
     if (slack < 0) {
       score -= rowsToGoal == 0 ? W_block : W_unreach;
     }
-
-    score +=
-        W_mobility * MoveGen::towerMobility(board, perspective, color);
   }
 
   if (s.playerToMove() == perspective && s.forcedColor().has_value()) {
@@ -82,7 +78,42 @@ auto Evaluator::scoreSide(const GameState& s, Player perspective) -> int {
     }
   }
 
-  return score;
+  return clampNonMateScore(score);
+}
+
+auto Evaluator::mateScore(bool win, int ply) -> int {
+  const int score{ s_MateScore - ply };
+  return win ? score : -score;
+}
+
+auto Evaluator::clampNonMateScore(int score) -> int {
+  return std::clamp(score, -(s_MateScore - s_MateBuffer),
+                    s_MateScore - s_MateBuffer);
+}
+
+auto Evaluator::formatScoreNorm(int score) -> std::string {
+  if (isMateScore(score)) {
+    return formatMate(score);
+  }
+
+  return fmt::format("{:.2f}", normalize(score));
+}
+
+auto Evaluator::normalize(int score) -> float {
+  return std::tanh(static_cast<float>(score) / s_ScoreScale);
+}
+
+auto Evaluator::formatScore(int score) -> std::string {
+  if (isMateScore(score)) {
+    return formatMate(score);
+  }
+  return fmt::format("{}", score);
+}
+
+auto Evaluator::formatMate(int score) -> std::string {
+  assert(isMateScore(score));
+  std::string_view sign{ score > 0 ? "+" : "-" };
+  return fmt::format("M{}{}", sign, (s_MateScore - std::abs(score)) / 2);
 }
 
 } // namespace kamisado

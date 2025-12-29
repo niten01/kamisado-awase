@@ -50,3 +50,30 @@ FetchContent_Declare(
   GIT_TAG v5.5.0)
 FetchContent_MakeAvailable(raylib_cpp)
 target_link_libraries(${PROJECT_NAME} PRIVATE raylib_cpp)
+
+# imgui
+message(STATUS "Fetching dependency: imgui")
+FetchContent_Declare(
+  imgui
+  GIT_REPOSITORY https://github.com/ocornut/imgui
+  GIT_TAG v1.92.5
+  GIT_PROGRESS TRUE)
+FetchContent_MakeAvailable(imgui)
+add_library(
+  imgui STATIC
+  ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_demo.cpp
+  ${imgui_SOURCE_DIR}/imgui_draw.cpp ${imgui_SOURCE_DIR}/imgui_tables.cpp
+  ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
+target_include_directories(imgui INTERFACE ${imgui_SOURCE_DIR})
+
+# rlimgui
+message(STATUS "Fetching dependency: rlimgui")
+FetchContent_Declare(
+  rlimgui
+  GIT_REPOSITORY https://github.com/raylib-extras/rlImGui
+  GIT_TAG dc7f97679a024eee8f5f009e77cc311748200415)
+FetchContent_MakeAvailable(rlimgui)
+add_library(rlimgui STATIC ${rlimgui_SOURCE_DIR}/rlImGui.cpp)
+target_link_libraries(rlimgui PUBLIC raylib imgui)
+target_include_directories(rlimgui INTERFACE ${rlimgui_SOURCE_DIR})
+target_link_libraries(${PROJECT_NAME} PRIVATE rlimgui)

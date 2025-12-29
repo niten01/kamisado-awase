@@ -38,7 +38,9 @@ public:
         pt = next();
       }
     }
-    stm_ = next();
+    for (auto& stm : stm_) {
+      stm = next();
+    }
     for (auto& f : forced_) {
       f = next();
     }
@@ -50,6 +52,10 @@ public:
                      static_cast<size_t>(tower.owner)) +
                     static_cast<size_t>(tower.color);
     return piece_[posIdx][towerIdx];
+  }
+
+  [[nodiscard]] auto sideToMoveKey(Player player) const -> uint64_t {
+    return stm_[static_cast<size_t>(player)];
   }
 
   [[nodiscard]] auto forcedKey(std::optional<Color> forcedColor) const
@@ -67,7 +73,7 @@ private:
   std::array<std::array<uint64_t, config::BoardSize * 2>,
              config::BoardSize * config::BoardSize>
       piece_{};
-  uint64_t stm_{};
+  std::array<uint64_t, static_cast<size_t>(Player::Count)> stm_{};
   std::array<uint64_t, static_cast<size_t>(Color::Count) + 1ULL>
       forced_{};
 };
@@ -76,8 +82,8 @@ private:
 
 GameState::GameState(Board board)
     : board_{ board },
+      hash_(recalculateHash(*this)),
       goals_{ board.coloring() } {
-  recalculateHash();
 }
 
 auto GameState::board() const -> const Board& {
@@ -92,21 +98,21 @@ auto GameState::forcedColor() const -> std::optional<Color> {
   return forcedColor_;
 }
 
-void GameState::recalculateHash() {
-  hash_ = std::hash<Player>{}(playerToMove_);
-  hash_combine(hash_, Zobrist::instance().forcedKey(forcedColor_));
-
-  for (int r = 0; r < static_cast<int>(board_.size()); r++) {
-    for (int c = 0; c < static_cast<int>(board_.size()); c++) {
-      auto tower{ board_.towerAt(Coord{ r, c }) };
+auto GameState::recalculateHash(const GameState& s) -> uint64_t {
+  uint64_t hash{ 0 };
+  for (int r = 0; r < static_cast<int>(s.board_.size()); r++) {
+    for (int c = 0; c < static_cast<int>(s.board_.size()); c++) {
+      auto tower{ s.board_.towerAt(Coord{ r, c }) };
       if (!tower) {
         continue;
       }
 
-      hash_combine(hash_,
-                   Zobrist::instance().towerKey(Coord{ r, c }, *tower));
+      hash ^= Zobrist::instance().towerKey(Coord{ r, c }, *tower);
     }
   }
+  hash ^= Zobrist::instance().sideToMoveKey(s.playerToMove_);
+  hash ^= Zobrist::instance().forcedKey(s.forcedColor_);
+  return hash;
 }
 
 auto GameState::terminalStatus() const -> Outcome {
@@ -149,22 +155,26 @@ auto GameState::apply(Move move) const -> GameState {
 }
 
 void GameState::applyInPlace(Move move) {
+  history_.push_back(hash_);
+
   if (move.isPass) {
-    forcedColor_ = board_.coloring().at(move.from);
+    setForcedColor(board_.coloring().at(move.from));
   } else {
-    auto towerToMove = board_.towerAt(move.from);
-    assert(towerToMove && "Invalid move (no tower)");
-    assert(towerToMove->owner == playerToMove_ &&
+    assert(board_.towerAt(move.from).has_value() &&
+           "Invalid move (no tower)");
+    Tower towerToMove = board_.towerAt(move.from).value();
+    assert(towerToMove.owner == playerToMove_ &&
            "Invalid move (not own tower)");
 
-    board_.move(*towerToMove, move.from, move.to);
-    forcedColor_ = board_.coloring().at(move.to);
+    hash_ ^= Zobrist::instance().towerKey(move.from, towerToMove);
+    hash_ ^= Zobrist::instance().towerKey(move.to, towerToMove);
+    board_.move(towerToMove, move.from, move.to);
+    setForcedColor(board_.coloring().at(move.to));
   }
 
-  playerToMove_ = opposite(playerToMove_);
-  auto oldHash  = hash_;
-  recalculateHash();
-  history_.push_back(oldHash);
+  toggleSideToMove();
+
+  assert(hash_ == recalculateHash(*this) && "Hash mismatch");
 }
 
 auto GameState::hash() const -> uint64_t {
@@ -173,6 +183,18 @@ auto GameState::hash() const -> uint64_t {
 
 auto GameState::goals() const -> Goals {
   return goals_;
+}
+
+void GameState::setForcedColor(Color newForcedColor) {
+  hash_ ^= Zobrist::instance().forcedKey(forcedColor_);
+  hash_ ^= Zobrist::instance().forcedKey(newForcedColor);
+  forcedColor_ = newForcedColor;
+}
+
+void GameState::toggleSideToMove() {
+  hash_ ^= Zobrist::instance().sideToMoveKey(playerToMove_);
+  playerToMove_ = opposite(playerToMove_);
+  hash_ ^= Zobrist::instance().sideToMoveKey(playerToMove_);
 }
 
 } // namespace kamisado

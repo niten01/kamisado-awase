@@ -1,11 +1,17 @@
 #include "kamisado/Game.hpp"
 #include "kamisado/BoardColoring.hpp"
+#include "kamisado/Config.hpp"
+#include "kamisado/Evaluator.hpp"
 #include "kamisado/MoveGen.hpp"
 #include "kamisado/Player.hpp"
 #include <algorithm>
+#include <cassert>
+#define IMGUI_DEFINE_MATH_OPERATORS
+#include <imgui.h>
 #include <iostream>
 #include <raylib.h>
 #include <raymath.h>
+#include <rlImGui.h>
 
 namespace kamisado {
 
@@ -36,12 +42,14 @@ auto color(Color c) -> raylib::Color {
 auto rectCenter(const raylib::Rectangle& rect) -> raylib::Vector2 {
   return { rect.x + (rect.width / 2), rect.y + (rect.height / 2) };
 }
+
 } // namespace
 
 Game::Game()
     : window_{ s_WindowSize, s_WindowSize, "Mu-Torere" },
       gameState_{ Board{ BoardColoring::official() } } {
   SetTargetFPS(60);
+  rlImGuiSetup(true);
 
   boardRect_ = { .x      = 0,
                  .y      = s_WindowSize - s_BoardSize,
@@ -62,10 +70,13 @@ Game::Game()
   }
 }
 
+Game::~Game() {
+  engine_.stopSearch();
+  rlImGuiShutdown();
+}
+
 void Game::run() {
-  gameState_      = GameState{ Board{ BoardColoring::official() } };
-  availableMoves_ = MoveGen::legalMoves(gameState_);
-  turn_           = 1;
+  restartAs(humanPlayer_); // default human
   while (!window_.ShouldClose()) {
     updateLogic();
     draw();
@@ -73,10 +84,6 @@ void Game::run() {
 }
 
 void Game::updateHumanMove() {
-  if (availableMoves_.size() == 1 && availableMoves_[0].isPass) {
-    makeMove(availableMoves_[0]);
-  }
-
   if (!raylib::Mouse::IsButtonPressed(::MOUSE_BUTTON_LEFT)) {
     return;
   }
@@ -118,14 +125,14 @@ void Game::updateHumanMove() {
 }
 
 void Game::updateEngineMove() {
-  if (!engine_.running()) {
-    engine_.startSearch(gameState_, config::MaxDepth);
-  }
+  AITimer_ += GetFrameTime();
 
-  if (raylib::Keyboard::IsKeyPressed(::KEY_SPACE)) {
-    engine_.stopSearch();
+  if (raylib::Keyboard::IsKeyPressed(::KEY_SPACE) ||
+      AITimer_ >= AIMaxTimeSeconds_) {
+    AITimer_ = 0;
     auto result{ engine_.currentBest() };
-    std::cout << "score: " << result->score << '\n';
+    std::cout << fmt::format("Chosen score: {}\n",
+                             Evaluator::formatScoreNorm(result->score));
     if (result->bestMove) {
       makeMove(*result->bestMove);
     }
@@ -133,10 +140,19 @@ void Game::updateEngineMove() {
 }
 
 void Game::updateLogic() {
+  if (state_ == State::GameOver) {
+    return;
+  }
+
   auto status{ gameState_.terminalStatus() };
   if (status.terminal) {
-    std::cout << "Winner: " << (int)status.winner.value_or(Player::Count)
-              << '\n';
+    state_ = State::GameOver;
+    engine_.stopSearch();
+  }
+
+  if (availableMoves_.size() == 1 && availableMoves_[0].isPass) {
+    makeMove(availableMoves_[0]);
+    return;
   }
 
   if (gameState_.playerToMove() == humanPlayer_) {
@@ -151,6 +167,22 @@ void Game::draw() {
   ClearBackground(::RAYWHITE);
 
   drawBoard();
+  drawAdvantageBar();
+
+  if (state_ == State::GameOver) {
+    assert(gameState_.terminalStatus().winner.has_value() &&
+           "Game over with no winner");
+    const int fontSize{ 100 };
+    std::string winStr{ fmt::format(
+        "{} wins!", gameState_.terminalStatus().winner == Player::White
+                        ? "White"
+                        : "Black") };
+    DrawText(winStr.c_str(),
+             s_WindowSize / 2 - MeasureText(winStr.c_str(), fontSize) / 2,
+             s_WindowSize / 2 - fontSize, fontSize, ::DARKGRAY);
+  }
+
+  drawGUI();
 
   EndDrawing();
 }
@@ -184,15 +216,32 @@ void Game::drawBoard() {
   }
 
   // best move
-  if (engine_.running()) {
+  if (showMoves_ != ShowMoves::None) {
     auto resultOpt{ engine_.currentBest() };
     if (resultOpt && resultOpt->bestMove) {
-      Move bestMove{ *resultOpt->bestMove };
-      drawMove(bestMove, ::BLUE);
+      if ((showMoves_ == ShowMoves::Engine &&
+           gameState_.playerToMove() == opposite(humanPlayer_)) ||
+          showMoves_ == ShowMoves::All) {
+        Move bestMove{ *resultOpt->bestMove };
+        drawMove(bestMove, ::BLUE);
+      }
     }
   }
 
   // towers
+  drawTowers();
+
+  // available moves
+  for (auto&& move : drawMoves_) {
+    auto tile{ tiles_[move.to.row][move.to.col] };
+    auto center{ rectCenter(tile) };
+    float r{ tile.width / 2 };
+    DrawCircleV(center, r, s_MoveColor);
+  }
+}
+
+void Game::drawTowers() {
+  const Board& board = gameState_.board();
   for (int row = 0; row < static_cast<int>(board.size()); row++) {
     for (int col = 0; col < static_cast<int>(board.size()); col++) {
       Coord pos{ row, col };
@@ -200,8 +249,8 @@ void Game::drawBoard() {
       auto tileCenter = rectCenter(tile);
       if (auto tower{ board.towerAt(pos) }) {
         raylib::Color baseColor{ tower->owner == Player::Black
-                                     ? ::BLACK
-                                     : ::WHITE };
+                                     ? s_BlackColor
+                                     : s_WhiteColor };
         float r{ (tile.width / 2) - 5 };
         float rInner{ 2 * r / 3 };
         if (canMoveFrom_.contains(pos)) {
@@ -213,14 +262,6 @@ void Game::drawBoard() {
         ::DrawCircleV(tileCenter, rInner, color(tower->color));
       }
     }
-  }
-
-  // available moves
-  for (auto&& move : drawMoves_) {
-    auto tile{ tiles_[move.to.row][move.to.col] };
-    auto center{ rectCenter(tile) };
-    float r{ tile.width / 2 };
-    DrawCircleV(center, r, s_MoveColor);
   }
 }
 
@@ -245,7 +286,11 @@ void Game::resetSelection() {
 
 void Game::makeMove(Move m) {
   gameState_ = gameState_.apply(m);
-  lastMove_  = m;
+
+  engine_.stopSearch();
+  engine_.startSearch(gameState_, config::MaxDepth);
+
+  lastMove_ = m;
   turn_++;
   availableMoves_ = MoveGen::legalMoves(gameState_);
   canMoveFrom_.clear();
@@ -260,4 +305,94 @@ void Game::drawMove(Move m, raylib::Color c) {
   auto toCenter{ rectCenter(tiles_[m.to.row][m.to.col]) };
   DrawLineEx(fromCenter, toCenter, 2, c);
 }
+
+void Game::flipBoard() {
+  for (auto& tile : tiles_) {
+    std::ranges::reverse(tile);
+  }
+
+  std::ranges::reverse(tiles_);
+  flipped_ = !flipped_;
+}
+
+void Game::drawGUI() {
+  rlImGuiBegin();
+
+  ImGui::Begin("Controls");
+
+  if (ImGui::Button("Restart as white")) {
+    restartAs(Player::White);
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Restart as black")) {
+    restartAs(Player::Black);
+  }
+
+  if (ImGui::Button("Flip board")) {
+    flipBoard();
+  }
+
+  static int showMovesVal{ static_cast<int>(showMoves_) };
+  static const char* showMovesNames[] = { "None", "Engine-only", "All" };
+  const char* showMovesCurrentName    = showMovesNames[showMovesVal];
+  if (ImGui::SliderInt("Show moves", &showMovesVal, 0,
+                       static_cast<int>(ShowMoves::Count) - 1,
+                       showMovesCurrentName, ImGuiSliderFlags_NoInput)) {
+    showMoves_ = static_cast<ShowMoves>(showMovesVal);
+  }
+
+  ImGui::InputFloat("AI max time, s", &AIMaxTimeSeconds_, 0.1F, 0.5F);
+  ImGui::Text("AI timer:");
+  ImGui::SameLine();
+  ImGui::ProgressBar(AITimer_ / AIMaxTimeSeconds_);
+
+  ImGui::End();
+
+  // ImGui::ShowDemoWindow();
+
+  rlImGuiEnd();
+}
+
+void Game::drawAdvantageBar() const {
+
+  using namespace ImGui;
+  constexpr float scale = 600;
+  float scoreFracWhite{ 0.5 };
+  std::string scoreStr{ "X" };
+  if (engine_.currentBest()) {
+    int scorePlayer{ engine_.currentBest()->score *
+                     (gameState_.playerToMove() == humanPlayer_ ? 1
+                                                                : -1) };
+    float scorePlayerNorm = Evaluator::normalize(scorePlayer);
+    scoreFracWhite        = (scorePlayerNorm + 1) / 2;
+    if (humanPlayer_ != Player::White) {
+      scoreFracWhite = 1 - scoreFracWhite;
+    }
+    scoreStr = Evaluator::formatScoreNorm(scorePlayer);
+  }
+
+  raylib::Rectangle barRect{ boardRect_.x + boardRect_.width,
+                             boardRect_.y, s_AdvantageBarWidth,
+                             boardRect_.height };
+  const int fontSize{ 15 };
+  DrawText(scoreStr.c_str(),
+           barRect.x + (barRect.width / 2.F) -
+               (MeasureText(scoreStr.c_str(), fontSize) / 2.F),
+           barRect.y - fontSize - 5, fontSize, ::DARKGRAY);
+  DrawRectangleRec(barRect, s_BlackColor);
+  DrawRectangleLinesEx(barRect, 2, ::DARKGRAY);
+  barRect.y += barRect.height * (1 - scoreFracWhite);
+  barRect.height += barRect.height * scoreFracWhite;
+  DrawRectangleRec(barRect, s_WhiteColor);
+}
+
+void Game::restartAs(Player player) {
+  state_ = State::Play;
+  humanPlayer_    = player;
+  gameState_      = GameState{ Board{ BoardColoring::official() } };
+  availableMoves_ = MoveGen::legalMoves(gameState_);
+  turn_           = 1;
+  engine_.startSearch(gameState_, config::MaxDepth);
+}
+
 } // namespace kamisado

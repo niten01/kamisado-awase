@@ -14,6 +14,10 @@ SearchEngine::SearchEngine(size_t ttSizePow2)
          "ttSizePow2 must be a power of 2");
 }
 
+SearchEngine::~SearchEngine() {
+  stopSearch();
+}
+
 auto SearchEngine::probe(uint64_t key) -> TTEntry* {
   TTEntry& e = tt_[key & (tt_.size() - 1)];
   if (e.key == key) {
@@ -113,12 +117,12 @@ auto SearchEngine::alphaBeta(const GameState& s, int depth, int alpha,
     -> int {
   ++nodes_;
 
-  if (depth <= 0 || !running_) {
-    return Evaluator::evaluate(s, perspective);
-  }
-
   auto status{ s.terminalStatus() };
   if (status.terminal) {
+    return Evaluator::mateScore(status.winner == perspective, ply);
+  }
+
+  if (depth <= 0 || !running_) {
     return Evaluator::evaluate(s, perspective);
   }
 
@@ -186,9 +190,11 @@ auto SearchEngine::alphaBeta(const GameState& s, int depth, int alpha,
   return result.score;
 }
 
-void SearchEngine::resetStats() {
+void SearchEngine::reset() {
+  stopSearch();
   nodes_ = 0;
   currentBest_.reset();
+  depth_ = 0;
 }
 auto SearchEngine::nodes() const -> uint64_t {
   return nodes_;
@@ -204,16 +210,24 @@ auto SearchEngine::negamaxLoop(const GameState& s,
 
     GameState child{ s.apply(move) };
 
+    int extDepth{ 0 };
+    assert(child.forcedColor() && "Move 2+ should have forced color");
+    int childMobility{ MoveGen::towerMobility(
+        child.board(), child.playerToMove(), *child.forcedColor()) };
+    if (childMobility <= 1) {
+      extDepth = 1;
+    }
+
     int score{};
     if (i == 0) {
-      score = -alphaBeta(child, depth - 1, -beta, -alpha, ply + 1,
-                         opposite(perspective));
+      score = -alphaBeta(child, depth - 1 + extDepth, -beta, -alpha,
+                         ply + 1, opposite(perspective));
     } else {
-      score = -alphaBeta(child, depth - 1, -(alpha + 1), -alpha, ply + 1,
-                         opposite(perspective));
+      score = -alphaBeta(child, depth - 1 + extDepth, -(alpha + 1),
+                         -alpha, ply + 1, opposite(perspective));
       if (score > alpha && score < beta) {
-        score = -alphaBeta(child, depth - 1, -beta, -alpha, ply + 1,
-                           opposite(perspective));
+        score = -alphaBeta(child, depth - 1 + extDepth, -beta, -alpha,
+                           ply + 1, opposite(perspective));
       }
     }
 
@@ -238,4 +252,61 @@ auto SearchEngine::negamaxLoop(const GameState& s,
     .score    = bestScore,
   };
 }
+
+void SearchEngine::startSearch(const GameState& s, int maxDepth) {
+  reset();
+  targeDepth_   = maxDepth;
+  running_      = true;
+  searchThread_ = std::thread([this, s]() {
+    for (depth_ = 1; depth_ <= targeDepth_ && running_; depth_++) {
+      int window{ 50 };
+      int alpha{ -s_Inf };
+      int beta{ s_Inf };
+      if (depth_ > 1) {
+        alpha = currentBest_->score - window;
+        beta  = currentBest_->score + window;
+      }
+      std::optional<Move> pvHint{ currentBest_.has_value()
+                                      ? currentBest_->bestMove
+                                      : std::nullopt };
+
+      auto r{ searchRoot(s, depth_, alpha, beta, pvHint) };
+
+      if (r.score <= alpha || r.score >= beta) {
+        r = searchRoot(s, depth_, -s_Inf, s_Inf, pvHint);
+      }
+
+      if (r.bestMove && running_) {
+        currentBest_ = r;
+        std::cout << fmt::format("Depth: {}; bestScore: {}; move: {}\n",
+                                 depth_, Evaluator::formatScore(r.score),
+                                 r.bestMove.value_or({}));
+      } else {
+        break;
+      }
+
+      if (Evaluator::isMateScore(r.score)) {
+        break;
+      }
+    }
+  });
+}
+
+void SearchEngine::stopSearch() {
+  if (running_.exchange(false)) {
+    searchThread_.join();
+  }
+}
+
+auto SearchEngine::running() -> bool {
+  if (depth_ > targeDepth_) {
+    stopSearch();
+  }
+  return running_;
+}
+
+auto SearchEngine::currentBest() const -> std::optional<Result> {
+  return currentBest_;
+}
+
 } // namespace kamisado

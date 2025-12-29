@@ -5,20 +5,27 @@ namespace kamisado {
 
 namespace {
 
-void addMovesFrom(const Board& board, Player player, Coord from,
-                  std::vector<Move>& moves) {
+template <typename F>
+void forEachMove(const Board& board, Player player, Coord from, F&& f) {
   assert(board.towerAt(from).has_value() && "No tower to test");
   assert(board.towerAt(from)->owner == player && "Not own tower");
   const int rowDelta = player == Player::White ? -1 : 1;
-  std::array<int, 3> colDeltas{ -1, 0, 1 };
+  constexpr std::array<int, 3> colDeltas{ -1, 0, 1 };
   for (auto colDelta : colDeltas) {
     Coord to{ from.row + rowDelta, from.col + colDelta };
     while (board.inBounds(to) && board.empty(to)) {
-      moves.push_back(Move{ .from = from, .to = to, .isPass = false });
+      std::forward<F>(f)(Move{ .from = from, .to = to, .isPass = false });
       to.row += rowDelta;
       to.col += colDelta;
     }
   }
+}
+
+void addMovesFrom(const Board& board, Player player, Coord from,
+                  std::vector<Move>& moves) {
+  forEachMove(board, player, from, [&](Move m) {
+    moves.push_back(m);
+  });
 }
 
 auto getTowerPos(const Board& board, Player player, Color tower)
@@ -62,13 +69,15 @@ auto MoveGen::legalMoves(const GameState& s) -> std::vector<Move> {
   return moves;
 }
 
+// count moves explicitly (hot path)
 auto MoveGen::towerMobility(const Board& board, Player p, Color tower)
     -> int {
   auto towerPos{ board.towerPos(p, tower) };
-  std::vector<Move> moves;
-  moves.reserve(board.size() * board.size());
-  addMovesFrom(board, p, towerPos, moves);
-  return static_cast<int>(moves.size());
+  int count{ 0 };
+  forEachMove(board, p, towerPos, [&](Move) {
+    count++;
+  });
+  return count;
 }
 
 } // namespace kamisado

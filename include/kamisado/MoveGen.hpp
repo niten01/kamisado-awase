@@ -10,7 +10,6 @@ struct MoveGen {
 
   static auto towerMobility(const Board& board, Player p, Color tower)
       -> int;
-
 };
 
 } // namespace kamisado

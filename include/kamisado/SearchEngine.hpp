@@ -5,6 +5,7 @@
 #include "kamisado/MoveGen.hpp"
 #include "kamisado/Player.hpp"
 #include <array>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdlib>
 #include <iostream>
@@ -37,58 +38,17 @@ public:
   };
 
   explicit SearchEngine(size_t ttSizePow2 = 1U << 20U);
+  ~SearchEngine();
 
-  void resetStats();
+  void reset();
   [[nodiscard]] auto nodes() const -> uint64_t;
 
-  void startSearch(const GameState& s, int maxDepth) {
-    resetStats();
-    running_      = true;
-    searchThread_ = std::jthread([this, maxDepth, s]() {
-      for (int d = 1; d <= maxDepth && running_; d++) {
-        int window{ 50 };
-        int alpha{ -s_Inf };
-        int beta{ s_Inf };
-        if (d > 1) {
-          alpha = currentBest_->score - window;
-          beta  = currentBest_->score + window;
-        }
-        std::optional<Move> pvHint{ currentBest_.has_value()
-                                        ? currentBest_->bestMove
-                                        : std::nullopt };
+  void startSearch(const GameState& s, int maxDepth);
 
-        auto r{ searchRoot(s, d, alpha, beta, pvHint) };
+  void stopSearch();
 
-        if (r.score <= alpha || r.score >= beta) {
-          r = searchRoot(s, d, -s_Inf, s_Inf, pvHint);
-        }
-
-        std::cout << fmt::format("Depth: {}; bestScore: {}; move: {}\n",
-                                 d, r.score, r.bestMove.value_or({}));
-        if (r.bestMove) {
-          currentBest_ = r;
-        } else {
-          break;
-        }
-
-        if (Evaluator::isMateScore(r.score)) {
-          break;
-        }
-      }
-    });
-  }
-
-  void stopSearch() {
-    running_ = false;
-    searchThread_.join();
-  }
-
-  [[nodiscard]] auto running() const -> bool {
-    return running_;
-  }
-  [[nodiscard]] auto currentBest() const -> std::optional<Result> {
-    return currentBest_;
-  }
+  [[nodiscard]] auto running() -> bool;
+  [[nodiscard]] auto currentBest() const -> std::optional<Result>;
 
 private:
   auto probe(uint64_t key) -> TTEntry*;
@@ -115,10 +75,12 @@ private:
 
   std::vector<TTEntry> tt_;
   uint64_t nodes_{ 0 };
+  int depth_{ 0 };
+  int targeDepth_{ 0 };
   std::optional<Result> currentBest_;
   std::array<std::array<std::optional<Move>, 2>, 128> killers_;
   std::optional<Move> pv_;
-  std::jthread searchThread_;
+  std::thread searchThread_;
   std::atomic<bool> running_{ false };
 };
 

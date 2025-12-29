@@ -34,7 +34,9 @@ public:
 
   [[nodiscard]] auto coloring() const -> const BoardColoring&;
   [[nodiscard]] auto empty(Coord p) const -> bool;
-  [[nodiscard]] auto size() const -> size_t;
+  [[nodiscard]] constexpr auto size() const -> size_t {
+    return board_.size();
+  }
   [[nodiscard]] auto inBounds(Coord p) const -> bool;
 
   void place(Tower tower, Coord p);
