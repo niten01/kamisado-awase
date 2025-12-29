@@ -7,6 +7,8 @@ namespace {
 
 void addMovesFrom(const Board& board, Player player, Coord from,
                   std::vector<Move>& moves) {
+  assert(board.towerAt(from).has_value() && "No tower to test");
+  assert(board.towerAt(from)->owner == player && "Not own tower");
   const int rowDelta = player == Player::White ? -1 : 1;
   std::array<int, 3> colDeltas{ -1, 0, 1 };
   for (auto colDelta : colDeltas) {
@@ -68,4 +70,5 @@ auto MoveGen::towerMobility(const Board& board, Player p, Color tower)
   addMovesFrom(board, p, towerPos, moves);
   return static_cast<int>(moves.size());
 }
+
 } // namespace kamisado

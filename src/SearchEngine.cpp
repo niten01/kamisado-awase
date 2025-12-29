@@ -3,6 +3,7 @@
 #include "kamisado/MoveGen.hpp"
 #include "kamisado/Player.hpp"
 #include <algorithm>
+#include <iostream>
 #include <ranges>
 
 namespace kamisado {
@@ -21,17 +22,17 @@ auto SearchEngine::probe(uint64_t key) -> TTEntry* {
   return nullptr;
 }
 
-void SearchEngine::store(uint64_t key, int depth, int score, Bound bound,
-                         std::optional<Move> bestMove) {
+void SearchEngine::store(uint64_t key, int depthRemainig, int score,
+                         Bound bound, std::optional<Move> bestMove) {
   TTEntry& e = tt_[key & (tt_.size() - 1)];
 
-  if (e.key == 0 || depth >= e.depth) {
-    e.key      = key;
-    e.depth    = depth;
-    e.score    = score;
-    e.bound    = bound;
-    e.bestMove = bestMove.value_or({});
-    e.hasBest  = bestMove.has_value();
+  if (e.key == 0 || depthRemainig >= e.depthRemaining) {
+    e.key            = key;
+    e.depthRemaining = depthRemainig;
+    e.score          = score;
+    e.bound          = bound;
+    e.bestMove       = bestMove.value_or({});
+    e.hasBest        = bestMove.has_value();
   }
 }
 
@@ -43,11 +44,12 @@ auto SearchEngine::moveOrderingScore(const GameState& s, const Move& move)
 
   const Player p = s.playerToMove();
   const Board& b = s.board();
+  assert(b.towerAt(move.from).has_value() && "No tower to move");
+  const Tower towerToMove = *b.towerAt(move.from);
+  assert(towerToMove.owner == p && "Not own tower");
 
-  if (p == Player::Black && move.to.row == Board::WhiteHomeRow) {
-    return 900000;
-  }
-  if (p == Player::White && move.to.row == Board::BlackHomeRow) {
+  if (move.to.row == s.goals().row(p) &&
+      move.to.col == s.goals().col(p, towerToMove.color)) {
     return 900000;
   }
 
@@ -63,13 +65,14 @@ auto SearchEngine::moveOrderingScore(const GameState& s, const Move& move)
 auto SearchEngine::searchRoot(const GameState& s, int depth, int alpha,
                               int beta, std::optional<Move> pvHint)
     -> Result {
-  Result out;
   auto moves{ MoveGen::legalMoves(s) };
   if (moves.empty()) {
+    Result out;
     out.score = Evaluator::evaluate(s, s.playerToMove());
     return out;
   }
 
+  bool firstGood{ false };
   auto* tte{ probe(s.hash()) };
   if (tte && tte->hasBest) {
     auto it{ std::ranges::find_if(moves, [&](const auto& m) {
@@ -77,6 +80,7 @@ auto SearchEngine::searchRoot(const GameState& s, int depth, int alpha,
     }) };
     if (it != moves.end()) {
       std::iter_swap(it, moves.begin());
+      firstGood = true;
     }
   }
   if (pvHint.has_value()) {
@@ -85,10 +89,11 @@ auto SearchEngine::searchRoot(const GameState& s, int depth, int alpha,
     }) };
     if (it != moves.end()) {
       std::iter_swap(it, moves.begin());
+      firstGood = true;
     }
   }
 
-  std::stable_sort(moves.begin() + 1, moves.end(),
+  std::stable_sort(moves.begin() + (firstGood ? 1 : 0), moves.end(),
                    [&](const auto& m1, const auto& m2) {
                      return moveOrderingScore(s, m1) >
                             moveOrderingScore(s, m2);
@@ -96,41 +101,11 @@ auto SearchEngine::searchRoot(const GameState& s, int depth, int alpha,
 
   const Player perspective{ s.playerToMove() };
 
-  int bestScore{ -s_Inf };
-  std::optional<Move> bestMove{};
+  Result result{ negamaxLoop(s, moves, perspective, depth, alpha, beta,
+                             1) };
 
-  for (auto&& [i, move] : std::views::enumerate(moves)) {
-    GameState child{ s.apply(move) };
-
-    int score{};
-    if (i == 0) {
-      score = -alphaBeta(child, depth - 1, -beta, -alpha, 1,
-                         opposite(perspective));
-    } else {
-      score = -alphaBeta(child, depth - 1, -(alpha + 1), -alpha, 1,
-                         opposite(perspective));
-      if (score > alpha && score < beta) {
-        score = -alphaBeta(child, depth - 1, -beta, -alpha, 1,
-                           opposite(perspective));
-      }
-    }
-
-    if (score > bestScore) {
-      bestScore = score;
-      bestMove  = move;
-    }
-    alpha = std::max(alpha, score);
-
-    if (alpha >= beta) {
-      break;
-    }
-  }
-
-  pv_          = bestMove;
-  out.score    = bestScore;
-  out.hasMove  = bestMove.has_value();
-  out.bestMove = bestMove.value_or({});
-  return out;
+  pv_ = result.bestMove;
+  return result;
 }
 
 auto SearchEngine::alphaBeta(const GameState& s, int depth, int alpha,
@@ -138,7 +113,7 @@ auto SearchEngine::alphaBeta(const GameState& s, int depth, int alpha,
     -> int {
   ++nodes_;
 
-  if (depth <= 0) {
+  if (depth <= 0 || !running_) {
     return Evaluator::evaluate(s, perspective);
   }
 
@@ -148,7 +123,7 @@ auto SearchEngine::alphaBeta(const GameState& s, int depth, int alpha,
   }
 
   auto* tte{ probe(s.hash()) };
-  if (tte && tte->depth >= depth) {
+  if (tte && tte->depthRemaining >= depth) {
     if (tte->bound == Bound::Exact) {
       return tte->score;
     }
@@ -168,16 +143,16 @@ auto SearchEngine::alphaBeta(const GameState& s, int depth, int alpha,
     return Evaluator::evaluate(s, perspective);
   }
 
+  bool firstGood{ false };
   if (tte && tte->hasBest) {
     auto it{ std::ranges::find_if(moves, [&](const auto& m) {
       return m == tte->bestMove;
     }) };
     if (it != moves.end()) {
       std::iter_swap(it, moves.begin());
+      firstGood = true;
     }
-  }
-
-  if (ply < static_cast<int>(killers_.size())) {
+  } else if (ply < static_cast<int>(killers_.size())) {
     for (auto k : killers_[ply]) {
       if (!k) {
         continue;
@@ -187,19 +162,46 @@ auto SearchEngine::alphaBeta(const GameState& s, int depth, int alpha,
       }) };
       if (it != moves.end()) {
         std::iter_swap(it, moves.begin());
+        firstGood = true;
       }
     }
   }
 
-  std::ranges::stable_sort(moves, [&](const auto& m1, const auto& m2) {
-    return moveOrderingScore(s, m1) > moveOrderingScore(s, m2);
-  });
+  std::stable_sort(moves.begin() + (firstGood ? 1 : 0), moves.end(),
+                   [&](const auto& m1, const auto& m2) {
+                     return moveOrderingScore(s, m1) >
+                            moveOrderingScore(s, m2);
+                   });
 
+  Result result{ negamaxLoop(s, moves, perspective, depth, alpha, beta,
+                             ply) };
+
+  Bound bound{ Bound::Exact };
+  if (result.score <= alpha) {
+    bound = Bound::Upper;
+  } else if (result.score >= beta) {
+    bound = Bound::Lower;
+  }
+  store(s.hash(), depth, result.score, bound, result.bestMove);
+  return result.score;
+}
+
+void SearchEngine::resetStats() {
+  nodes_ = 0;
+  currentBest_.reset();
+}
+auto SearchEngine::nodes() const -> uint64_t {
+  return nodes_;
+}
+
+auto SearchEngine::negamaxLoop(const GameState& s,
+                               const std::vector<Move>& moves,
+                               Player perspective, int depth, int alpha,
+                               int beta, int ply) -> Result {
   int bestScore{ -s_Inf };
   std::optional<Move> bestMove{};
-  const int origAlpha{ alpha };
-
   for (auto&& [i, move] : std::views::enumerate(moves)) {
+
     GameState child{ s.apply(move) };
 
     int score{};
@@ -231,20 +233,9 @@ auto SearchEngine::alphaBeta(const GameState& s, int depth, int alpha,
     }
   }
 
-  Bound bound{ Bound::Exact };
-  if (bestScore <= origAlpha) {
-    bound = Bound::Upper;
-  } else if (bestScore >= beta) {
-    bound = Bound::Lower;
-  }
-  store(s.hash(), depth, bestScore, bound, bestMove);
-  return bestScore;
-}
-
-void SearchEngine::resetStats() {
-  nodes_ = 0;
-}
-auto SearchEngine::nodes() const -> uint64_t {
-  return nodes_;
+  return {
+    .bestMove = bestMove,
+    .score    = bestScore,
+  };
 }
 } // namespace kamisado

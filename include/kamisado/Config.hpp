@@ -6,9 +6,10 @@
 namespace kamisado::config {
 
 constexpr size_t BoardSize = 8;
+constexpr int MaxDepth = 1000;
 
 // clang-format off
-constexpr auto OfficialBoardColoring = std::array{
+constexpr auto OfficialBoardColors = std::array{
   std::array{ Color::Brown, Color::Purple,Color::Blue,  Color::Yellow,Color::Pink,  Color::Green, Color::Red,   Color::Orange },
   std::array{ Color::Green, Color::Brown, Color::Yellow,Color::Red,   Color::Purple,Color::Pink,  Color::Orange,Color::Blue },
   std::array{ Color::Red,   Color::Yellow,Color::Brown, Color::Green, Color::Blue,  Color::Orange,Color::Pink,  Color::Purple },

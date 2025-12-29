@@ -23,7 +23,7 @@ if [ $# -ne 0 ] ; then
 	echo -e "$HI--------------------------------------$NC\n"
   if [ "$1" == "run" ]; then
     set -eux
-    ./build/mu-torere
+    ./build/kamisado
   elif [ "$1" == "test" ]; then
     pushd build/tests > /dev/null
     rm -rf coverage

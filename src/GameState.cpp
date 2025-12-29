@@ -75,7 +75,8 @@ private:
 } // namespace
 
 GameState::GameState(Board board)
-    : board_{ board } {
+    : board_{ board },
+      goals_{ board.coloring() } {
   recalculateHash();
 }
 
@@ -111,23 +112,15 @@ void GameState::recalculateHash() {
 auto GameState::terminalStatus() const -> Outcome {
   Outcome o;
 
-  for (int i = 0; i < static_cast<int>(board_.size()); i++) {
-    Coord blackHome = Coord{ Board::BlackHomeRow, i };
-    Coord whiteHome = Coord{ Board::WhiteHomeRow, i };
+  for (int color = 0; color < static_cast<int>(Color::Count); color++) {
+    Color towerColor{ static_cast<Color>(color) };
 
-    if (auto onBlackHome{ board_.towerAt(blackHome) }) {
-      if (onBlackHome->owner == Player::White &&
-          onBlackHome->color == board_.coloring().at(blackHome)) {
-        o.winner   = Player::White;
-        o.terminal = true;
-        return o;
-      }
-    }
+    for (int p = 0; p < static_cast<int>(Player::Count); p++) {
+      Player player{ static_cast<Player>(p) };
+      Coord pos{ board_.towerPos(player, towerColor) };
 
-    if (auto onWhiteHome{ board_.towerAt(whiteHome) }) {
-      if (onWhiteHome->owner == Player::Black &&
-          onWhiteHome->color == board_.coloring().at(whiteHome)) {
-        o.winner   = Player::Black;
+      if (pos == goals_.goal(player, towerColor)) {
+        o.winner   = player;
         o.terminal = true;
         return o;
       }
@@ -148,11 +141,13 @@ auto GameState::terminalStatus() const -> Outcome {
 
   return o;
 }
+
 auto GameState::apply(Move move) const -> GameState {
   auto gs = *this;
   gs.applyInPlace(move);
   return gs;
 }
+
 void GameState::applyInPlace(Move move) {
   if (move.isPass) {
     forcedColor_ = board_.coloring().at(move.from);
@@ -171,7 +166,13 @@ void GameState::applyInPlace(Move move) {
   recalculateHash();
   history_.push_back(oldHash);
 }
+
 auto GameState::hash() const -> uint64_t {
   return hash_;
 }
+
+auto GameState::goals() const -> Goals {
+  return goals_;
+}
+
 } // namespace kamisado

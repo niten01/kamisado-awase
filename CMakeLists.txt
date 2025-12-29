@@ -11,13 +11,25 @@ set(SOURCES
     src/Main.cpp
     src/Game.cpp
     src/Board.cpp
-  )
+    src/Evaluator.cpp
+    src/GameState.cpp
+    src/MoveGen.cpp
+    src/SearchEngine.cpp)
 
 add_executable(${PROJECT_NAME} ${SOURCES})
 
 # Dependencies
 include(FetchContent)
 set(FETCHCONTENT_QUIET FALSE)
+
+# fmt
+message(STATUS "Fetching dependency: fmt")
+FetchContent_Declare(
+  fmt
+  GIT_REPOSITORY https://github.com/fmtlib/fmt
+  GIT_TAG 12.1.0)
+FetchContent_MakeAvailable(fmt)
+target_link_libraries(${PROJECT_NAME} PUBLIC fmt::fmt)
 
 # raylib
 message(STATUS "Fetching dependency: raylib")
