@@ -23,7 +23,7 @@ struct Coord {
 
   Coord() = default;
   template <typename T, typename U>
-  explicit Coord(T row, U col)
+  explicit constexpr Coord(T row, U col)
       : row(row),
         col(col) {
   }

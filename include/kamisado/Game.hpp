@@ -27,6 +27,7 @@ private:
       -> std::optional<Coord>;
   void drawGUI();
   void resetSelection();
+  void selectTile(Coord pos);
   void makeMove(Move m);
 
   void flipBoard();
@@ -52,7 +53,7 @@ private:
   };
 
   struct CoordHasher {
-    constexpr auto operator()(const Coord& c) const -> std::size_t {
+     auto operator()(const Coord& c) const -> std::size_t {
       return std::hash<int>()(c.row) ^ std::hash<int>()(c.col);
     }
   };

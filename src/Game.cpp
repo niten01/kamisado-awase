@@ -46,7 +46,7 @@ auto rectCenter(const raylib::Rectangle& rect) -> raylib::Vector2 {
 } // namespace
 
 Game::Game()
-    : window_{ s_WindowSize, s_WindowSize, "Mu-Torere" },
+    : window_{ s_WindowSize, s_WindowSize, "Kamisado Awase" },
       gameState_{ Board{ BoardColoring::official() } } {
   SetTargetFPS(60);
   rlImGuiSetup(true);
@@ -99,12 +99,7 @@ void Game::updateHumanMove() {
 
   if (auto tower{ board.towerAt(pos) };
       tower && tower->owner == humanPlayer_) {
-    selectedTile_ = pos;
-    drawMoves_.clear();
-    std::ranges::copy_if(availableMoves_, std::back_inserter(drawMoves_),
-                         [&](const auto& m) {
-                           return m.from == pos;
-                         });
+    selectTile(pos);
     if (drawMoves_.empty()) {
       resetSelection();
     }
@@ -298,6 +293,10 @@ void Game::makeMove(Move m) {
     canMoveFrom_.insert(move.from);
   }
   resetSelection();
+  assert(gameState_.forcedColor().has_value() && "Turn 2+ has no forced color");
+  auto towerToMovePos{ gameState_.board().towerPos(
+      gameState_.playerToMove(), *gameState_.forcedColor()) };
+  selectTile(towerToMovePos);
 }
 
 void Game::drawMove(Move m, raylib::Color c) {
@@ -387,12 +386,21 @@ void Game::drawAdvantageBar() const {
 }
 
 void Game::restartAs(Player player) {
-  state_ = State::Play;
+  state_          = State::Play;
   humanPlayer_    = player;
   gameState_      = GameState{ Board{ BoardColoring::official() } };
   availableMoves_ = MoveGen::legalMoves(gameState_);
   turn_           = 1;
   engine_.startSearch(gameState_, config::MaxDepth);
+}
+
+void Game::selectTile(Coord pos) {
+  selectedTile_ = pos;
+  drawMoves_.clear();
+  std::ranges::copy_if(availableMoves_, std::back_inserter(drawMoves_),
+                       [&](const auto& m) {
+                         return m.from == pos;
+                       });
 }
 
 } // namespace kamisado

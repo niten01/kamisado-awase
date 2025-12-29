@@ -2,6 +2,7 @@
 #include "kamisado/MoveGen.hpp"
 #include "kamisado/Player.hpp"
 #include <cstdlib>
+#include <algorithm>
 
 namespace kamisado {
 

@@ -35,7 +35,7 @@ void SearchEngine::store(uint64_t key, int depthRemainig, int score,
     e.depthRemaining = depthRemainig;
     e.score          = score;
     e.bound          = bound;
-    e.bestMove       = bestMove.value_or({});
+    e.bestMove       = bestMove.value_or(Move{});
     e.hasBest        = bestMove.has_value();
   }
 }
@@ -280,7 +280,7 @@ void SearchEngine::startSearch(const GameState& s, int maxDepth) {
         currentBest_ = r;
         std::cout << fmt::format("Depth: {}; bestScore: {}; move: {}\n",
                                  depth_, Evaluator::formatScore(r.score),
-                                 r.bestMove.value_or({}));
+                                 r.bestMove.value_or(Move{}));
       } else {
         break;
       }
