@@ -29,14 +29,16 @@ Session::Session(bool analysisEnabled)
 
 SessionManagerPlugin::SessionManagerPlugin()
     : rng_{ std::random_device{}() } {
+  sessionCleanerThread_ = std::jthread([this] {
+    sessionCleaner();
+  });
 }
 
 void SessionManagerPlugin::initAndStart(const Json::Value& config) {
-  /// Initialize and start the plugin
 }
 
 void SessionManagerPlugin::shutdown() {
-  /// Shutdown the plugin
+  running_ = false;
 }
 
 auto SessionManagerPlugin::create(SessionOptions options) -> int {
@@ -184,6 +186,7 @@ void Session::makeMove(Move move) {
   msg["type"]    = "delta";
   msg["payload"] = stateJson();
   pushMessage(msg);
+  lastActive_ = std::chrono::system_clock::now();
 
   if (s_->availableMoves().size() == 1 &&
       s_->availableMoves().front().isPass) {
@@ -254,6 +257,28 @@ void SessionManagerPlugin::leave(int id, Player player) {
   });
   if (it != tokens_.end()) {
     tokens_.erase(it);
+  }
+}
+
+void SessionManagerPlugin::sessionCleaner() {
+  while (running_) {
+    std::this_thread::sleep_for(std::chrono::seconds(60));
+
+    auto now = std::chrono::system_clock::now();
+    for (auto it = sessions_.begin(); it != sessions_.end();) {
+      auto&& [id, session] = *it;
+      auto delta = std::chrono::duration_cast<std::chrono::minutes>(
+                       now - session.lastActive())
+                       .count();
+      if (delta > 30) {
+        it = sessions_.erase(it);
+        std::erase_if(tokens_, [id](const auto& kv) {
+          return kv.second.first == id;
+        });
+      } else {
+        it++;
+      }
+    }
   }
 }
 

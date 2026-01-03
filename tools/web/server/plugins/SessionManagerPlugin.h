@@ -41,11 +41,13 @@ public:
   auto analysisEnabled() const -> bool;
   [[nodiscard]] auto stateJson() const -> Json::Value;
   auto playerToMove() const -> Player;
+  auto lastActive() const {
+    return lastActive_;
+  }
 
   void subscribe(const drogon::WebSocketConnectionPtr& ws);
   void unsubscribe(const drogon::WebSocketConnectionPtr& ws);
   void makeMove(Move move);
-
 
 private:
   void pushMessage(const Json::Value& message);
@@ -56,6 +58,7 @@ private:
   bool analysisEnabled_{ false };
   std::list<MoveEntry> moves_;
   std::unordered_set<drogon::WebSocketConnectionPtr> subscribers_;
+  std::chrono::system_clock::time_point lastActive_;
 };
 
 struct SessionOptions {
@@ -81,6 +84,8 @@ public:
   [[nodiscard]] auto join(int id, Player player) -> Token;
   void leave(int id, Player player);
   auto randomFreeSlot(int id) -> Player;
+private:
+  void sessionCleaner();
 
 private:
   constexpr static int s_MaxSessions    = 10'000;
@@ -99,5 +104,7 @@ private:
   std::unordered_map<int, Session> sessions_;
   std::unordered_map<TokenHash, std::pair<int, Player>, TokenHashHasher>
       tokens_;
+  std::jthread sessionCleanerThread_;
+  bool running_{ true };
 };
 } // namespace kamisado
