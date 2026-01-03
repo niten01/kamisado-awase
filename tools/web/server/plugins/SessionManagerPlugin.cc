@@ -24,7 +24,8 @@ int SessionManagerPlugin::s_IDCounter = 0;
 
 Session::Session(bool analysisEnabled)
     : s_{ std::make_unique<GameService>() },
-      analysisEnabled_{ analysisEnabled } {
+      analysisEnabled_{ analysisEnabled },
+      lastActive_{ std::chrono::system_clock::now() } {
 }
 
 SessionManagerPlugin::SessionManagerPlugin()
