@@ -1,8 +1,9 @@
 import {defineConfig} from "vite";
 import vue from "@vitejs/plugin-vue";
 
-export default defineConfig({
+export default defineConfig(({command}) => ({
   plugins: [vue()],
+  base: command === 'build' ? '/kamisado-awase/' : '/',
   server: {
     port: 5173,
     proxy: {
@@ -17,4 +18,4 @@ export default defineConfig({
       },
     }
   }
-});
+}));
