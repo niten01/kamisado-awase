@@ -15,16 +15,19 @@ cmake -S . \
 			-G Ninja \
 			-DCMAKE_CXX_COMPILER=clang++ \
 			-DCMAKE_C_COMPILER=clang \
-			-DCMAKE_BUILD_TYPE=Release \
+			-DCMAKE_BUILD_TYPE=Debug \
 			-DCMAKE_EXPORT_COMPILE_COMMANDS=1 
 cmake --build build --parallel $(nproc)
 cp -f build/compile_commands.json .
 
 if [ $# -ne 0 ] ; then
 	echo -e "$HI--------------------------------------$NC\n"
-  if [ "$1" == "run" ]; then
+  if [ "$1" == "gui" ]; then
     set -eux
-    ./build/kamisado
+    ./build/tools/engine-gui/kamisado-engine-gui
+  elif [ "$1" == "backend" ]; then
+    set -eux
+    ./build/tools/web/server/kamisado-server
   elif [ "$1" == "test" ]; then
     pushd build/tests > /dev/null
     rm -rf coverage

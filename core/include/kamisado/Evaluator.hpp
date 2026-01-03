@@ -7,7 +7,7 @@ class Evaluator {
 public:
   static auto evaluate(const GameState& s, Player perspective) -> int;
 
-  static auto isMateScore(int score) -> bool {
+  static constexpr auto isMateScore(int score) -> bool {
     return std::abs(score) > s_MateScore - s_MateBuffer;
   }
 

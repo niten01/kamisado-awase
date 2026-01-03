@@ -1,4 +1,4 @@
-#include "kamisado/Game.hpp"
+#include "engine-gui/Game.hpp"
 #include "kamisado/BoardColoring.hpp"
 #include "kamisado/Config.hpp"
 #include "kamisado/Evaluator.hpp"
@@ -36,6 +36,7 @@ auto color(Color c) -> raylib::Color {
     return raylib::Color{ 0xD77522FF };
   default:
     assert(false && "Unknown color");
+    return -1;
   }
 }
 
@@ -46,10 +47,14 @@ auto rectCenter(const raylib::Rectangle& rect) -> raylib::Vector2 {
 } // namespace
 
 Game::Game()
-    : window_{ s_WindowSize, s_WindowSize, "Kamisado Awase" },
-      gameState_{ Board{ BoardColoring::official() } } {
+    : window_{ s_WindowSize, s_WindowSize, "Mu-Torere" } {
   SetTargetFPS(60);
   rlImGuiSetup(true);
+
+  s_.setEngineCallback([this](const SearchEngine::Result& result) {
+    bestMove_  = result.bestMove;
+    bestScore_ = result.score;
+  });
 
   boardRect_ = { .x      = 0,
                  .y      = s_WindowSize - s_BoardSize,
@@ -71,7 +76,6 @@ Game::Game()
 }
 
 Game::~Game() {
-  engine_.stopSearch();
   rlImGuiShutdown();
 }
 
@@ -95,14 +99,11 @@ void Game::updateHumanMove() {
   }
   Coord pos{ *posOpt };
 
-  const Board& board{ gameState_.board() };
+  const Board& board{ s_.board() };
 
   if (auto tower{ board.towerAt(pos) };
       tower && tower->owner == humanPlayer_) {
     selectTile(pos);
-    if (drawMoves_.empty()) {
-      resetSelection();
-    }
   } else if (board.empty(pos) && selectedTile_) {
     auto moveIt{ std::ranges::find_if(drawMoves_, [&](const auto& m) {
       return m.to == pos;
@@ -120,16 +121,13 @@ void Game::updateHumanMove() {
 }
 
 void Game::updateEngineMove() {
-  AITimer_ += GetFrameTime();
+  engineTimer_ += GetFrameTime();
 
   if (raylib::Keyboard::IsKeyPressed(::KEY_SPACE) ||
-      AITimer_ >= AIMaxTimeSeconds_) {
-    AITimer_ = 0;
-    auto result{ engine_.currentBest() };
-    std::cout << fmt::format("Chosen score: {}\n",
-                             Evaluator::formatScoreNorm(result->score));
-    if (result->bestMove) {
-      makeMove(*result->bestMove);
+      engineTimer_ >= engineMaxTimeSeconds_) {
+    engineTimer_ = 0;
+    if (bestMove_) {
+      makeMove(*bestMove_);
     }
   }
 }
@@ -139,18 +137,20 @@ void Game::updateLogic() {
     return;
   }
 
-  auto status{ gameState_.terminalStatus() };
+  auto status{ s_.state().terminalStatus() };
   if (status.terminal) {
     state_ = State::GameOver;
-    engine_.stopSearch();
+    s_.stopEngine();
   }
 
-  if (availableMoves_.size() == 1 && availableMoves_[0].isPass) {
-    makeMove(availableMoves_[0]);
+  if (s_.availableMoves().size() == 1 &&
+      (s_.availableMoves()[0].isPass ||
+       s_.playerToMove() != humanPlayer_)) {
+    makeMove(s_.availableMoves()[0]);
     return;
   }
 
-  if (gameState_.playerToMove() == humanPlayer_) {
+  if (s_.playerToMove() == humanPlayer_) {
     updateHumanMove();
   } else {
     updateEngineMove();
@@ -165,11 +165,11 @@ void Game::draw() {
   drawAdvantageBar();
 
   if (state_ == State::GameOver) {
-    assert(gameState_.terminalStatus().winner.has_value() &&
+    assert(s_.state().terminalStatus().winner.has_value() &&
            "Game over with no winner");
     const int fontSize{ 100 };
     std::string winStr{ fmt::format(
-        "{} wins!", gameState_.terminalStatus().winner == Player::White
+        "{} wins!", s_.state().terminalStatus().winner == Player::White
                         ? "White"
                         : "Black") };
     DrawText(winStr.c_str(),
@@ -183,7 +183,7 @@ void Game::draw() {
 }
 
 void Game::drawBoard() {
-  const Board& board = gameState_.board();
+  const Board& board = s_.board();
   auto hoveredCoordOpt{ testHitCoord(raylib::Mouse::GetPosition()) };
 
   // board
@@ -206,18 +206,17 @@ void Game::drawBoard() {
   }
 
   // last move
-  if (turn_ > 1) {
-    drawMove(lastMove_, raylib::Color{ 0xFFFFFF55 });
+  if (auto lastMove{ s_.lastMove() }) {
+    drawMove(*lastMove, raylib::Color{ 0xFFFFFF55 });
   }
 
   // best move
   if (showMoves_ != ShowMoves::None) {
-    auto resultOpt{ engine_.currentBest() };
-    if (resultOpt && resultOpt->bestMove) {
+    if (bestMove_) {
       if ((showMoves_ == ShowMoves::Engine &&
-           gameState_.playerToMove() == opposite(humanPlayer_)) ||
+           s_.playerToMove() == opposite(humanPlayer_)) ||
           showMoves_ == ShowMoves::All) {
-        Move bestMove{ *resultOpt->bestMove };
+        Move bestMove{ *bestMove_ };
         drawMove(bestMove, ::BLUE);
       }
     }
@@ -236,7 +235,7 @@ void Game::drawBoard() {
 }
 
 void Game::drawTowers() {
-  const Board& board = gameState_.board();
+  const Board& board = s_.board();
   for (int row = 0; row < static_cast<int>(board.size()); row++) {
     for (int col = 0; col < static_cast<int>(board.size()); col++) {
       Coord pos{ row, col };
@@ -248,7 +247,7 @@ void Game::drawTowers() {
                                      : s_WhiteColor };
         float r{ (tile.width / 2) - 5 };
         float rInner{ 2 * r / 3 };
-        if (canMoveFrom_.contains(pos)) {
+        if (s_.canMoveFrom(pos)) {
           ::DrawRing(tileCenter, (tile.width / 2) - 3, tile.width / 2, 0,
                      360, 50, ::WHITE);
         }
@@ -280,23 +279,14 @@ void Game::resetSelection() {
 }
 
 void Game::makeMove(Move m) {
-  gameState_ = gameState_.apply(m);
+  s_.makeMove(m);
+  s_.startEngineSearch();
 
-  engine_.stopSearch();
-  engine_.startSearch(gameState_, config::MaxDepth);
-
-  lastMove_ = m;
-  turn_++;
-  availableMoves_ = MoveGen::legalMoves(gameState_);
-  canMoveFrom_.clear();
-  for (auto&& move : availableMoves_) {
-    canMoveFrom_.insert(move.from);
-  }
   resetSelection();
-  assert(gameState_.forcedColor().has_value() && "Turn 2+ has no forced color");
-  auto towerToMovePos{ gameState_.board().towerPos(
-      gameState_.playerToMove(), *gameState_.forcedColor()) };
-  selectTile(towerToMovePos);
+  assert(s_.state().forcedColor().has_value() &&
+         "Move 2+ should have forced color");
+  selectTile(s_.board().towerPos(s_.state().playerToMove(),
+                                 *s_.state().forcedColor()));
 }
 
 void Game::drawMove(Move m, raylib::Color c) {
@@ -340,10 +330,11 @@ void Game::drawGUI() {
     showMoves_ = static_cast<ShowMoves>(showMovesVal);
   }
 
-  ImGui::InputFloat("AI max time, s", &AIMaxTimeSeconds_, 0.1F, 0.5F);
-  ImGui::Text("AI timer:");
+  ImGui::InputFloat("Engine max time, s", &engineMaxTimeSeconds_, 0.1F,
+                    0.5F);
+  ImGui::Text("Engine timer:");
   ImGui::SameLine();
-  ImGui::ProgressBar(AITimer_ / AIMaxTimeSeconds_);
+  ImGui::ProgressBar(engineTimer_ / engineMaxTimeSeconds_);
 
   ImGui::End();
 
@@ -358,17 +349,14 @@ void Game::drawAdvantageBar() const {
   constexpr float scale = 600;
   float scoreFracWhite{ 0.5 };
   std::string scoreStr{ "X" };
-  if (engine_.currentBest()) {
-    int scorePlayer{ engine_.currentBest()->score *
-                     (gameState_.playerToMove() == humanPlayer_ ? 1
-                                                                : -1) };
-    float scorePlayerNorm = Evaluator::normalize(scorePlayer);
-    scoreFracWhite        = (scorePlayerNorm + 1) / 2;
-    if (humanPlayer_ != Player::White) {
-      scoreFracWhite = 1 - scoreFracWhite;
-    }
-    scoreStr = Evaluator::formatScoreNorm(scorePlayer);
+  int scorePlayer{ bestScore_ *
+                   (s_.state().playerToMove() == humanPlayer_ ? 1 : -1) };
+  float scorePlayerNorm = Evaluator::normalize(scorePlayer);
+  scoreFracWhite        = (scorePlayerNorm + 1) / 2;
+  if (humanPlayer_ != Player::White) {
+    scoreFracWhite = 1 - scoreFracWhite;
   }
+  scoreStr = Evaluator::formatScoreNorm(scorePlayer);
 
   raylib::Rectangle barRect{ boardRect_.x + boardRect_.width,
                              boardRect_.y, s_AdvantageBarWidth,
@@ -386,21 +374,23 @@ void Game::drawAdvantageBar() const {
 }
 
 void Game::restartAs(Player player) {
-  state_          = State::Play;
-  humanPlayer_    = player;
-  gameState_      = GameState{ Board{ BoardColoring::official() } };
-  availableMoves_ = MoveGen::legalMoves(gameState_);
-  turn_           = 1;
-  engine_.startSearch(gameState_, config::MaxDepth);
+  state_       = State::Play;
+  humanPlayer_ = player;
+  s_.reset();
+  s_.startEngineSearch();
 }
 
 void Game::selectTile(Coord pos) {
   selectedTile_ = pos;
   drawMoves_.clear();
-  std::ranges::copy_if(availableMoves_, std::back_inserter(drawMoves_),
+  std::ranges::copy_if(s_.availableMoves(),
+                       std::back_inserter(drawMoves_),
                        [&](const auto& m) {
                          return m.from == pos;
                        });
+  if (drawMoves_.empty()) {
+    resetSelection();
+  }
 }
 
 } // namespace kamisado

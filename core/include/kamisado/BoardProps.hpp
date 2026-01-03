@@ -2,6 +2,7 @@
 #include "kamisado/Player.hpp"
 #include <cassert>
 #include <cstdint>
+#include <functional>
 #include <limits>
 
 namespace kamisado {
@@ -33,6 +34,12 @@ struct Coord {
 
   friend auto operator==(const Coord& l, const Coord& r)
       -> bool = default;
+
+  struct Hasher {
+    auto operator()(const Coord& c) const -> std::size_t {
+      return std::hash<int>()(c.row) ^ std::hash<int>()(c.col);
+    }
+  };
 };
 
 struct Tower {

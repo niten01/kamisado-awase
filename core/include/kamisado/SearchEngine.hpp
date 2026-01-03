@@ -11,6 +11,7 @@
 #include <iostream>
 #include <optional>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace kamisado {
@@ -43,6 +44,7 @@ public:
   void reset();
   [[nodiscard]] auto nodes() const -> uint64_t;
 
+  void setCallback(std::function<void(const Result&)> callback);
   void startSearch(const GameState& s, int maxDepth);
 
   void stopSearch();
@@ -77,6 +79,8 @@ private:
   uint64_t nodes_{ 0 };
   int depth_{ 0 };
   int targeDepth_{ 0 };
+  std::function<void(const Result&)> resultCallback_{ [](auto&&) {
+  } };
   std::optional<Result> currentBest_;
   std::array<std::array<std::optional<Move>, 2>, 128> killers_;
   std::optional<Move> pv_;

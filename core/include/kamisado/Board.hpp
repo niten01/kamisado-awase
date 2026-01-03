@@ -30,7 +30,7 @@ class Board {
   }
 
 public:
-  explicit Board(BoardColoring coloring);
+  explicit Board(BoardColoring coloring = BoardColoring::official());
 
   [[nodiscard]] auto coloring() const -> const BoardColoring&;
   [[nodiscard]] auto empty(Coord p) const -> bool;

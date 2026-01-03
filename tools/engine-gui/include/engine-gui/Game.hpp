@@ -1,7 +1,7 @@
 #pragma once
+#include "kamisado/GameService.hpp"
 #include "kamisado/GameState.hpp"
 #include "kamisado/SearchEngine.hpp"
-#include <memory>
 #include <raylib-cpp.hpp>
 #include <raylib.h>
 #include <unordered_set>
@@ -36,8 +36,6 @@ private:
   void restartAs(Player player);
 
 private:
-  static constexpr int s_EngineDepth = 4;
-
   static constexpr int s_WindowSize        = 800;
   static constexpr int s_BoardSize         = 600;
   static constexpr int s_AdvantageBarWidth = 30;
@@ -52,29 +50,20 @@ private:
     GameOver
   };
 
-  struct CoordHasher {
-     auto operator()(const Coord& c) const -> std::size_t {
-      return std::hash<int>()(c.row) ^ std::hash<int>()(c.col);
-    }
-  };
-
   raylib::Window window_;
   State state_{ State::Play };
 
-  int turn_{ 1 };
   bool flipped_{ false };
-  GameState gameState_;
   Player humanPlayer_{ Player::White };
-  SearchEngine engine_;
-  std::vector<Move> availableMoves_;
-  std::unordered_set<Coord, CoordHasher> canMoveFrom_;
+  GameService s_;
 
   Rectangle boardRect_{};
   std::array<std::array<Rectangle, config::BoardSize>, config::BoardSize>
       tiles_{};
   std::optional<Coord> selectedTile_;
   std::vector<Move> drawMoves_;
-  Move lastMove_;
+  std::optional<Move> bestMove_;
+  int bestScore_{ 0 };
 
   enum class ShowMoves : uint8_t {
     None,
@@ -83,8 +72,8 @@ private:
     Count
   };
   ShowMoves showMoves_{ ShowMoves::Engine };
-  float AIMaxTimeSeconds_{ 5.F };
-  float AITimer_{ 0.F };
+  float engineMaxTimeSeconds_{ 5.F };
+  float engineTimer_{ 0.F };
 };
 
 } // namespace kamisado
