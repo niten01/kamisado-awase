@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_BACKEND_ORIGIN ?? "";
+const API_BASE = import.meta.env.VITE_BACKEND_ORIGIN ?? "https://clarity-bibliographic-income-owen.trycloudflare.com";
 
 export async function createSession({analysisEnabled}) {
   const res = await fetch(`${API_BASE}/api/sessions`, {
