@@ -15,4 +15,6 @@ auto coordToFileRank(Coord c) -> std::string;
 
 auto fileRankToCoord(const std::string& fileRank) -> std::optional<Coord>;
 
+extern const std::unordered_set<std::string> allowedOrigins;
+
 } // namespace kamisado

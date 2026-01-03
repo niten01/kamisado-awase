@@ -3,6 +3,12 @@
 
 namespace kamisado {
 
+// NOLINTNEXTLINE
+const std::unordered_set<std::string> allowedOrigins = {
+  "https://niten01.github.io",
+  "http://localhost:5173",
+};
+
 void sendJsonError(
     const std::string& message,
     std::function<void(const drogon::HttpResponsePtr&)>&& callback,
