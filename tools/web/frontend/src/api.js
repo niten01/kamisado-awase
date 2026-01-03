@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE ?? "https://exception-communications-slide-attended.trycloudflare.com";
+const API_BASE = "https://exception-communications-slide-attended.trycloudflare.com";
 
 export async function createSession({analysisEnabled}) {
   const res = await fetch(`${API_BASE}/api/sessions`, {
