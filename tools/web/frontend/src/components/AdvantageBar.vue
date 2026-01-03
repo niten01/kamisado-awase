@@ -15,7 +15,6 @@ const percentWhite = computed(() => {
 });
 
 const fillStyle = computed(() => {
-  // We color by sign using CSS variables, but keep it simple:
   const playerAdvantage = props.analysis.advantageWhite * (props.side === "white" ? 1 : -1);
   const isGood = playerAdvantage >= 0;
   return {
@@ -24,7 +23,6 @@ const fillStyle = computed(() => {
 });
 
 const label = computed(() => {
-  console.log(props.analysis)
   return (props.side === "white" ? props.analysis.formattedScoreWhite : props.analysis.formattedScoreBlack);
 });
 </script>

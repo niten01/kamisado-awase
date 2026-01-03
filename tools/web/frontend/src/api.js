@@ -1,4 +1,4 @@
-const API_BASE = "https://exception-communications-slide-attended.trycloudflare.com";
+const API_BASE = import.meta.env.VITE_BACKEND_ORIGIN ?? "";
 
 export async function createSession({analysisEnabled}) {
   const res = await fetch(`${API_BASE}/api/sessions`, {

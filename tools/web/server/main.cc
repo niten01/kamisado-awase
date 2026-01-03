@@ -31,7 +31,7 @@ auto main(int /*argc*/, char** argv) -> int {
 
         addCorsHeaders(req, resp);
 
-        resp->addHeader("Access-Control-Allow-Methods", "GET,POST");
+        resp->addHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
         resp->addHeader("Access-Control-Allow-Headers",
                         "Content-Type, Authorization");
         resp->addHeader("Access-Control-Max-Age", "600");
@@ -45,7 +45,7 @@ auto main(int /*argc*/, char** argv) -> int {
         addCorsHeaders(req, resp);
       });
 
-  drogon::app().addListener("0.0.0.0", 8081);
+  drogon::app().addListener("0.0.0.0", 8485);
   std::filesystem::path binPath{ argv[0] };
   drogon::app().loadConfigFile(binPath.parent_path() / "config.yaml");
   drogon::app().run();

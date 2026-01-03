@@ -10,9 +10,9 @@ class GameController : public drogon::HttpController<GameController> {
 public:
   METHOD_LIST_BEGIN
   ADD_METHOD_TO(GameController::move, "/api/sessions/{1}/move", Post,
-                "kamisado::AuthFilter");
+                Options, "kamisado::AuthFilter");
   ADD_METHOD_TO(GameController::state, "/api/sessions/{1}/state", Get,
-                "kamisado::AuthFilter");
+                Options, "kamisado::AuthFilter");
   METHOD_LIST_END
 
   void move(const HttpRequestPtr& req,

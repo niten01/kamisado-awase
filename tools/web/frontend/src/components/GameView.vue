@@ -72,7 +72,6 @@ function onSquareClick(square) {
   if (!canInteract()) return;
 
   const legalFromMap = props.state?.legalMovesMap || null;
-  console.log(ui, legalFromMap)
 
   // second click => attempt move
   if (ui.selected) {

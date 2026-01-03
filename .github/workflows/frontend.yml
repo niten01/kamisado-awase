@@ -27,6 +27,8 @@ jobs:
         
     - run: npm ci
     - run: npm run build
+      env:
+        VITE_BACKEND_ORIGIN: ${{ vars.BACKEND_ORIGIN }}
 
     - name: Deploy to GitHub Pages
       uses: JamesIves/github-pages-deploy-action@v4
