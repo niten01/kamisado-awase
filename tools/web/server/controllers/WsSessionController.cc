@@ -2,7 +2,6 @@
 #include "drogon/HttpAppFramework.h"
 #include "plugins/SessionManagerPlugin.h"
 #include "trantor/utils/Logger.h"
-#include <spdlog/spdlog.h>
 #include <stdexcept>
 
 namespace kamisado {
