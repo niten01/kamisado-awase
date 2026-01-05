@@ -45,9 +45,9 @@ auto main(int /*argc*/, char** argv) -> int {
         addCorsHeaders(req, resp);
       });
 
-  drogon::app().addListener("0.0.0.0", 8485);
+  drogon::app().addListener("0.0.0.0", 80);
   std::filesystem::path binPath{ argv[0] };
-  drogon::app().loadConfigFile(binPath.parent_path() / "config.yaml");
+  drogon::app().loadConfigFile(binPath.parent_path() / "config.json");
   drogon::app().run();
   return 0;
 }

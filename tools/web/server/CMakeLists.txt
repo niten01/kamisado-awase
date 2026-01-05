@@ -35,5 +35,5 @@ target_include_directories(
 target_sources(${PROJECT_NAME} PRIVATE ${SRC_DIR} ${CTL_SRC} ${FILTER_SRC}
                                        ${PLUGIN_SRC} ${MODEL_SRC})
 
-configure_file("${CMAKE_CURRENT_SOURCE_DIR}/config.yaml"
-               "${CMAKE_CURRENT_BINARY_DIR}/config.yaml" COPYONLY)
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/config.json"
+               "${CMAKE_CURRENT_BINARY_DIR}/config.json" COPYONLY)
