@@ -40,13 +40,17 @@ void WsSessionController::handleNewConnection(
 
 void WsSessionController::handleConnectionClosed(
     const WebSocketConnectionPtr& wsConnPtr) {
-  auto ctx = wsConnPtr->getContext<ConnContext>();
-  if (!ctx) {
-    return;
+  try {
+    auto ctx = wsConnPtr->getContext<ConnContext>();
+    if (!ctx) {
+      return;
+    }
+    auto* manager = app().getPlugin<SessionManagerPlugin>();
+    manager->get(ctx->sessionID).unsubscribe(wsConnPtr);
+    manager->leave(ctx->sessionID, ctx->side);
+  } catch (const SessionException& e) {
+    LOG_WARN << "Error on disconnect: " << e.what();
   }
-  auto* manager = app().getPlugin<SessionManagerPlugin>();
-  manager->get(ctx->sessionID).unsubscribe(wsConnPtr);
-  manager->leave(ctx->sessionID, ctx->side);
 }
 
 } // namespace kamisado
