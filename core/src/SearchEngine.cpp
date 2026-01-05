@@ -35,7 +35,7 @@ void SearchEngine::store(uint64_t key, int depthRemainig, int score,
     e.depthRemaining = depthRemainig;
     e.score          = score;
     e.bound          = bound;
-    e.bestMove       = bestMove.value_or({});
+    e.bestMove       = bestMove.value_or(Move{});
     e.hasBest        = bestMove.has_value();
   }
 }
@@ -206,7 +206,7 @@ auto SearchEngine::negamaxLoop(const GameState& s,
                                int beta, int ply) -> Result {
   int bestScore{ -s_Inf };
   std::optional<Move> bestMove{};
-  for (auto&& [i, move] : std::views::enumerate(moves)) {
+  for (auto&& [i, move] : std::ranges::views::enumerate(moves)) {
 
     GameState child{ s.apply(move) };
 

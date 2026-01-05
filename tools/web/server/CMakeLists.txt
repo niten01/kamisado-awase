@@ -17,6 +17,7 @@ set(SODIUM_DISABLE_TESTS ON)
 FetchContent_MakeAvailable(Sodium)
 target_link_libraries(${PROJECT_NAME} PRIVATE sodium)
 
+# drogon
 add_subdirectory(thirdparty/drogon)
 target_link_libraries(${PROJECT_NAME} PRIVATE drogon)
 
