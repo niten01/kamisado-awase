@@ -206,7 +206,8 @@ auto SearchEngine::negamaxLoop(const GameState& s,
                                int beta, int ply) -> Result {
   int bestScore{ -s_Inf };
   std::optional<Move> bestMove{};
-  for (auto&& [i, move] : std::ranges::views::enumerate(moves)) {
+  bool firstMove{ true };
+  for (auto&& move : moves) {
 
     GameState child{ s.apply(move) };
 
@@ -219,7 +220,7 @@ auto SearchEngine::negamaxLoop(const GameState& s,
     }
 
     int score{};
-    if (i == 0) {
+    if (firstMove) {
       score = -alphaBeta(child, depth - 1 + extDepth, -beta, -alpha,
                          ply + 1, opposite(perspective));
     } else {
@@ -245,6 +246,8 @@ auto SearchEngine::negamaxLoop(const GameState& s,
         }
       }
     }
+
+    firstMove = false;
   }
 
   return {
