@@ -7,5 +7,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(CORE_TARGET kamisado-core)
 
+option(BUILD_GUI "Build raylib GUI" ON)
+option(BUILD_SERVER "Build web server" ON)
+
 add_subdirectory(core)
 add_subdirectory(tools)
