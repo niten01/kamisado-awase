@@ -177,7 +177,7 @@ void Session::makeMove(Move move) {
   }
 
   auto&& legalMoves = s_->availableMoves();
-  if (!std::ranges::contains(legalMoves, move)) {
+  if (std::ranges::find(legalMoves, move) != legalMoves.end()) {
     throw SessionException("Illegal move");
   }
 
